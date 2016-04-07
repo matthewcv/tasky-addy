@@ -1,200 +1,390 @@
 <!DOCTYPE html>
 <html>
 
-  <head>
-    <script>document.write('<base href="' + document.location + '" />');</script>
-    
+<head>
+    <script>
+        document.write('<base href="' + document.location + '" />');
+    </script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/Rx.umd.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/angular2-polyfills.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/angular2-all.umd.js"></script>
     <script src="https://cdn.rawgit.com/requirejs/almond/0.3.1/almond.js"></script>
-    
+
     <script>
-      var taskId = 0;
-      function Task(name,time){
-          this.name = name;
-          this.time = time;
-          this.childTasks = [];
-          this.isRoot = false;
-          this.id = taskId++;
-      }
-      
-      Task.prototype = {
-          isLastChild:function(){
-              return this.nextSibling() == null;
-          },
-          newSibling:function(){
-              var sibling = new Task();
-              
-              this.parentTask.addChild(sibling);
-          },
-          addChild:function(child){
-              child.parentTask = this;
-              this.childTasks.push(child)
-          },
-          indent:function(){
-              var prev = this.previousSibling();
-              if(prev != null){
-                  this.parentTask.childTasks.splice(this.myIndex(),1)
-                  prev.addChild(this);
-                  this.autofocus = true;
-                  return true;
-              } 
-          },
-          outdent:function(){
-              if(!this.parentTask.isRoot){
-                  
-                  var last = this.lastSibling();
-                  while(last != null){
-                      last.outdent();
-                      last = this.lastSibling();
-                  }
-                  
-                  var parentIdx = this.parentTask.myIndex();
-                  var newParent = this.parentTask.parentTask;
-                  this.parentTask.childTasks.splice(this.myIndex(),1);
-                  newParent.childTasks.splice(parentIdx+1,0,this);
-                  this.parentTask = newParent;
-                  return true;
-              }
-          },
-          myIndex:function(){
-             return this.parentTask.childTasks.indexOf(this);   
-          },
-          previousSibling:function(){
-              var myIdx = this.myIndex();
-              if(myIdx > 0){
-                  return this.parentTask.childTasks[myIdx-1]
-              }
-              return null;
-          },
-          nextSibling:function(){
-              var myIdx = this.myIndex();
-              if(myIdx < this.parentTask.childTasks.length -1){
-                  return this.parentTask.childTasks[myIdx+1]
-              }
-              return null;
-          },
-          lastSibling:function(){
-              var lastIdx = this.parentTask.childTasks.length -1;
-              if(this.myIndex() == lastIdx){
-                  return null;
-              }
-              return this.parentTask.childTasks[lastIdx];
-          }
-      }
-      
-      
-      requirejs(
-          [],
-          function run(){
-            ng.platform.browser.bootstrap(require('App'));
-          }
-        );
-        
-      define(
-        "App",
-        function registerApp(){
-          
-          function AppController(){
+    requirejs(
+        ["AppComponent"],
+        (AppComponent) => {
+            ng.core.enableProdMode();
+            ng.platform.browser.bootstrap(AppComponent)
+        }
+    );
+    
+    
+    
+
+    define("Task", () =>{
+        var taskId = 0;
+        class Task{
             
-            this.rootTask = new Task("root",0);
+            constructor(){
+                this.name = null;
+                this._time = null;
+                this.childTasks = [];
+                this.isRoot = false;
+                this.id = taskId++;
+            }
+            
+            get time(){
+                
+                if(this.childTasks.length){
+                    let time = 0;
+                    this.childTasks.forEach(c => time += c.time)
+                    return time;
+                }
+                return this._time;
+            }
+            
+            set time(t){
+                this._time = t;
+            }
+            
+          
+            isLastChild(){
+                //whether i am the last child in my parent's childTasks
+                return this.nextSibling() == null;
+            }
+            
+            isVeryLastChild(){
+                //whether I am the last child of the last child all the way up to the root task. In other words, the bottom task in the list no matter what my parent is
+                var task = this;
+                while(!task.isRoot && task.isLastChild()){
+                    task = task.parentTask;
+                }
+                return task.isRoot;  
+            }
+            newSibling(){
+                var sibling = new Task();
+                
+                this.parentTask.addChild(sibling);
+            }
+            addChild(child, at){
+                child.parentTask = this;
+                if(at == undefined){
+                    this.childTasks.push(child)
+                }else{
+                    this.childTasks.splice(at,0,child)
+                }
+            }
+            removeChild(child){
+                this.childTasks.splice(child.myIndex(),1);
+                child.parentTask = null;
+            }
+            
+
+            indent(){
+                var prev = this.previousSibling();
+                if(prev != null){
+                    this.parentTask.removeChild(this);
+                    prev.addChild(this);
+                    return true;
+                } 
+            }
+            
+            outdent(){
+                if(!this.parentTask.isRoot){
+                    
+                    var last = this.lastSibling();
+                    while(last != null){
+                        last.outdent();
+                        last = this.lastSibling();
+                    }
+                    
+                    var parentIdx = this.parentTask.myIndex();
+                    var newParent = this.parentTask.parentTask;
+                    this.parentTask.removeChild(this);
+                    newParent.addChild(this,parentIdx +1);
+                    return true;
+                }
+            }
+            myIndex(){
+                return this.parentTask.childTasks.indexOf(this);   
+            }
+            previousSibling(){
+                var myIdx = this.myIndex();
+                if(myIdx > 0){
+                    return this.parentTask.childTasks[myIdx-1]
+                }
+                return null;
+            }
+            nextSibling(){
+                var myIdx = this.myIndex();
+                if(myIdx < this.parentTask.childTasks.length -1){
+                    return this.parentTask.childTasks[myIdx+1]
+                }
+                return null;
+            }
+            lastSibling(){
+                var lastIdx = this.parentTask.childTasks.length -1;
+                if(this.myIndex() == lastIdx){
+                    return null;
+                }
+                return this.parentTask.childTasks[lastIdx];
+            }
+            firstSibling(){
+                if(this.myIndex == 0){
+                    return null;
+                }
+                return this.parentTask.childTasks[0];
+            }
+            firstChild(){
+                if(this.childTasks.length == 0){
+                    return null;
+                }
+                return this.childTasks[0];
+            }
+            lastChild(){
+                if(this.childTasks.length == 0){
+                    return null;
+                }
+                return this.childTasks[this.childTasks.length-1];
+            }
+            
+            getFlattenedNext(){
+                //get's the next task as if the whole thing was a flattened list
+                
+                                
+                var n = this.firstChild() || this.nextSibling();
+                if(n){
+                    return n;
+                }
+                
+                var p = this.parentTask;
+                while(!p.isRoot){
+                    var pn = p.nextSibling();
+                    if(pn){
+                        return pn;
+                    }
+                    p = p.parentTask;
+                }
+            }
+            
+            getFlattenedPrevious(){
+                //get's the previous task as if the whole thing was a flattened list
+                
+                var p = this.previousSibling();
+                if(p){
+                    var pl = p.lastChild();
+                    
+                    if(pl){
+                        var tpl = pl.lastChild();
+                        while(tpl != null){
+                            pl = tpl;
+                            tpl = pl.lastChild();
+                        }
+                        
+                        return pl;
+                    }
+                    return p;
+                }
+                if(!this.parentTask.isRoot){
+                    return this.parentTask;
+                }
+                return null;
+            }
+        }
+        return Task;
+                
+    });
+
+    
+    define("AppComponent",["Task", "TaskComponent"], (Task,TaskComponent) =>{
+        
+        
+        
+        
+        function AppComponent(){
+        
+            this.rootTask = new Task();
             this.rootTask.isRoot = true;
             this.rootTask.addChild(new Task());
-              
-          };
-          
-          AppController.annotations = [
+            this.helpVisible = false;
+            
+        };
+        AppComponent.annotations = [
             new ng.core.Component(
-              {
-                selector: 'my-app',
-                
-                directives:[require('Task') ],
-                template:`add your tasks<hr><task [task]="rootTask">`,
-              }    
+                {
+                    selector: 'my-app',
+                    
+                    directives:[TaskComponent],
+                    template:getTpl('my-app'),
+                }    
             ),
 
-          ]
-          
-          return AppController;
-        }
+        ]
         
-        
-      );
-      
-      define(
-        "Task",
-        function(){
-          function Task(){
+
+        return AppComponent;
+    });
+    
+    
+    
+    
+    define("TaskComponent", () => {
+        function TaskComponent(){
             this.task = null;
-            
-          }
-          Task.prototype = {
-              onKeyDown: function onKeyDown(ev, task){
-                  console.log(ev, task)
-                  if(ev.keyCode === 32 && ev.ctrlKey && ev.altKey){
-                      //ctrl + alt + space will outdent this task
-                      task.outdent();
-                      focusThisLater(ev.target.name);
-                  }else if(ev.keyCode === 32 && ev.ctrlKey){
-                      //ctrl + space will indent this task
-                      task.indent();   
-                      focusThisLater(ev.target.name);
-                  }else if(ev.keyCode === 9 && !ev.shiftKey && ev.target.nextElementSibling == null && task.isLastChild() && task.childTasks.length == 0){
-                      //tab on last input will create a new row below
-                      task.newSibling();
-                  }
-                  
-              }
-          }
-          
-          Task.annotations = [
-            new ng.core.Component({
-              inputs:["task"],
-              selector:'task',
-              directives:[Task],
-              template:getTpl('task-template')
-            }),
-            
-          ]
-          
-          return Task
         }
-      );
-      
-      function isLastInput(elem){
-          return elem.nextElementSibling == null;
-      }
-      
-      function getTpl(name){
-          return document.getElementById(name).innerHTML;
-      }
-      
-      function focusThisLater(name){
-          setTimeout(()=>{
-              document.querySelector(`input[name='${name}']`).focus()
-          },0)
-      }
+        TaskComponent.prototype = {
+            onKeyDown: function onKeyDown(ev, task){
+                //console.log(ev, task)
+                if(ev.keyCode === 32 && ev.ctrlKey && ev.altKey){
+                    //ctrl + alt + space will outdent this task
+                    task.outdent();
+                    focusThisLater(ev.target.name);
+                }else if(ev.keyCode === 32 && ev.ctrlKey){
+                    //ctrl + space will indent this task
+                    task.indent();   
+                    focusThisLater(ev.target.name);
+                }else if(ev.keyCode === 9 && !ev.shiftKey && ev.target.nextElementSibling == null && task.isVeryLastChild()){
+                    //tab on last input will create a new row below
+                    task.newSibling();
+                }else if(ev.keyCode === 38 && ev.ctrlKey ){
+                    ev.preventDefault();
+                    var prev = task.getFlattenedPrevious()
+                    if(prev){
+                        let name;
+                        if(ev.altKey){
+                            //ctrl + alt + up  move the thing up one row
+                            task.parentTask.removeChild(task);
+                            prev.parentTask.addChild(task, prev.myIndex())
+                            name = ev.target.name
+                        }else{
+                            //ctrl + Up select the previous item
+                            name = ev.target.name.replace(task.id.toString(), prev.id.toString());
+                        }
+                        focusThisLater(name);
+                    }
+                }else if(ev.keyCode === 40 && ev.ctrlKey){
+                    ev.preventDefault();
+                    var next =  task.getFlattenedNext();
+                    if(next){
+                        let name;
+                        if(ev.altKey){
+                            //ctrl + alt + down  move the thing down one row
+                            task.parentTask.removeChild(task); 
+                            next.parentTask.addChild(task, next.myIndex() +1)
+                            name = ev.target.name
+                        }else{
+                            //ctrl + Down select the next item
+                            name = ev.target.name.replace(task.id.toString(), next.id.toString());
+                        }
+                        focusThisLater(name);
+                    }
+                    
+                }
+                
+            }
+        }
+        
+        TaskComponent.annotations = [
+            new ng.core.Component({
+                inputs:["task"],
+                selector:'task',
+                directives:[TaskComponent],
+                template:getTpl('task-template')
+            }),
+        
+        ]
+        
+        return TaskComponent
+    });
+    
+    
+    
+    function isLastInput(elem){
+        return elem.nextElementSibling == null;
+    }
+    
+    function getTpl(name){
+        return document.getElementById(name).innerHTML;
+    }
+    
+    function focusThisLater(name, after){
+        setTimeout(()=>{
+            document.querySelector(`input[name='${name}']`).focus()
+            if(after){
+                after();
+            }
+        },0)
+    }
+    
+    
     </script>
     <style>
-        .task-children{
+        .task-children {
             padding-left: 15px;
         }
-        </style>
-  </head>
+        .fixed-right{
+            position: fixed;
+            right: 8px;
+        }
+        .title-buttons{
+            top: 8px;
+        }
+        .keyboard-command>code{
+            margin:0px 5px;
+            font-weight: bold;
+            font-size: larger;
+        }
+        .keyboard-command>span{
+            margin:0px 5px;
+        }
+        .help-panel{
+            top: 28px;
+        }
 
-  <body>
+    </style>
+</head>
+
+<body>
     <my-app></my-app>
-    
-    <script type="text/html" id="task-template">
-    <div class="task">
-        <div class="task-data" *ngIf="!task.isRoot">
-            <input placeholder="name" type="text" name="{{task.id}}-name" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.name">
-            <input placeholder="time" type="number" name="{{task.id}}-time" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.time">
-        </div>
-        <div class="task-children" *ngFor="#ctask of task.childTasks"><task [task]="ctask" ></task></div>
-    </div>
+
+    <script type="text/html" id='my-app'>
+        <input placeholder="what are you trying to do?" type="text" name="{{rootTask.id}}-name"  [(ngModel)]="rootTask.name">
+        <span >{{rootTask.time}}</span>
+        <hr /><task [task]="rootTask"></task>
+        <div class="title-buttons fixed-right"><a href="" (click)="helpVisible = !helpVisible; $event.preventDefault()">Help</a></div>
+        <div *ngIf="helpVisible" class="help-panel fixed-right">
+            <h3>Keyboard Commands</h3>
+            <div class="keyboard-command">
+                <code>Tab</code><span>Moves to the next item or adds a new item if at the very end</span>
+            </div>
+            <div class="keyboard-command">
+                <code>Ctrl + Space</code><span>Indents the current item to make it a child of the previous one</span>
+            </div>
+            <div class="keyboard-command">
+                <code>Ctrl + Alt + Space</code><span>Outdents the current item to make it a sibling to the previous one</span>
+            </div>
+            <div class="keyboard-command">
+                <code>Ctrl + Up</code><span>Move focus to the previous item</span>
+            </div>
+            <div class="keyboard-command">
+                <code>Ctrl + Down</code><span>Move focus to the next item</span>
+            </div>
+        </div> 
     </script>
-  </body>
+
+    <script type="text/html" id="task-template">
+        <div class="task">
+            <div class="task-data" *ngIf="!task.isRoot">
+                <input placeholder="name" type="text" name="{{task.id}}-name" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.name">
+                <input placeholder="time" type="number" name="{{task.id}}-time" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.time" [disabled]="!!task.childTasks.length" >
+            </div>
+            <div class="task-children" *ngFor="#ctask of task.childTasks">
+                <task [task]="ctask"></task>
+            </div>
+        </div>
+    </script>
+</body>
 
 </html>
