@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <script>document.write('<base href="' + document.location + '" />');</script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/Rx.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/angular2-polyfills.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/angular2-all.umd.js"></script>
+    <script src="https://cdn.rawgit.com/requirejs/almond/0.3.1/almond.js"></script>
+    
+    <script>
+      var taskId = 0;
+      function Task(name,time){
+          this.name = name;
+          this.time = time;
+          this.childTasks = [];
+          this.isRoot = false;
+          this.id = taskId++;
+      }
+      
+      Task.prototype = {
+          isLastChild:function(){
+              return this.nextSibling() == null;
+          },
+          newSibling:function(){
+              var sibling = new Task();
+              
+              this.parentTask.addChild(sibling);
+          },
+          addChild:function(child){
+              child.parentTask = this;
+              this.childTasks.push(child)
+          },
+          indent:function(){
+              var prev = this.previousSibling();
+              if(prev != null){
+                  this.parentTask.childTasks.splice(this.myIndex(),1)
+                  prev.addChild(this);
+                  this.autofocus = true;
+                  return true;
+              } 
+          },
+          outdent:function(){
+              if(!this.parentTask.isRoot){
+                  
+                  var last = this.lastSibling();
+                  while(last != null){
+                      last.outdent();
+                      last = this.lastSibling();
+                  }
+                  
+                  var parentIdx = this.parentTask.myIndex();
+                  var newParent = this.parentTask.parentTask;
+                  this.parentTask.childTasks.splice(this.myIndex(),1);
+                  newParent.childTasks.splice(parentIdx+1,0,this);
+                  this.parentTask = newParent;
+                  return true;
+              }
+          },
+          myIndex:function(){
+             return this.parentTask.childTasks.indexOf(this);   
+          },
+          previousSibling:function(){
+              var myIdx = this.myIndex();
+              if(myIdx > 0){
+                  return this.parentTask.childTasks[myIdx-1]
+              }
+              return null;
+          },
+          nextSibling:function(){
+              var myIdx = this.myIndex();
+              if(myIdx < this.parentTask.childTasks.length -1){
+                  return this.parentTask.childTasks[myIdx+1]
+              }
+              return null;
+          },
+          lastSibling:function(){
+              var lastIdx = this.parentTask.childTasks.length -1;
+              if(this.myIndex() == lastIdx){
+                  return null;
+              }
+              return this.parentTask.childTasks[lastIdx];
+          }
+      }
+      
+      
+      requirejs(
+          [],
+          function run(){
+            ng.platform.browser.bootstrap(require('App'));
+          }
+        );
+        
+      define(
+        "App",
+        function registerApp(){
+          
+          function AppController(){
+            
+            this.rootTask = new Task("root",0);
+            this.rootTask.isRoot = true;
+            this.rootTask.addChild(new Task());
+              
+          };
+          
+          AppController.annotations = [
+            new ng.core.Component(
+              {
+                selector: 'my-app',
+                
+                directives:[require('Task') ],
+                template:`add your tasks<hr><task [task]="rootTask">`,
+              }    
+            ),
+
+          ]
+          
+          return AppController;
+        }
+        
+        
+      );
+      
+      define(
+        "Task",
+        function(){
+          function Task(){
+            this.task = null;
+            
+          }
+          Task.prototype = {
+              onKeyDown: function onKeyDown(ev, task){
+                  console.log(ev, task)
+                  if(ev.keyCode === 32 && ev.ctrlKey && ev.altKey){
+                      //ctrl + alt + space will outdent this task
+                      task.outdent();
+                      focusThisLater(ev.target.name);
+                  }else if(ev.keyCode === 32 && ev.ctrlKey){
+                      //ctrl + space will indent this task
+                      task.indent();   
+                      focusThisLater(ev.target.name);
+                  }else if(ev.keyCode === 9 && !ev.shiftKey && ev.target.nextElementSibling == null && task.isLastChild() && task.childTasks.length == 0){
+                      //tab on last input will create a new row below
+                      task.newSibling();
+                  }
+                  
+              }
+          }
+          
+          Task.annotations = [
+            new ng.core.Component({
+              inputs:["task"],
+              selector:'task',
+              directives:[Task],
+              template:getTpl('task-template')
+            }),
+            
+          ]
+          
+          return Task
+        }
+      );
+      
+      function isLastInput(elem){
+          return elem.nextElementSibling == null;
+      }
+      
+      function getTpl(name){
+          return document.getElementById(name).innerHTML;
+      }
+      
+      function focusThisLater(name){
+          setTimeout(()=>{
+              document.querySelector(`input[name='${name}']`).focus()
+          },0)
+      }
+    </script>
+    <style>
+        .task-children{
+            padding-left: 15px;
+        }
+        </style>
+  </head>
+
+  <body>
+    <my-app></my-app>
+    
+    <script type="text/html" id="task-template">
+    <div class="task">
+        <div class="task-data" *ngIf="!task.isRoot">
+            <input placeholder="name" type="text" name="{{task.id}}-name" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.name">
+            <input placeholder="time" type="number" name="{{task.id}}-time" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.time">
+        </div>
+        <div class="task-children" *ngFor="#ctask of task.childTasks"><task [task]="ctask" ></task></div>
+    </div>
+    </script>
+  </body>
+
+</html>
