@@ -27,12 +27,22 @@
         var taskId = 0;
         class Task{
             
-            constructor(){
+            constructor(init){
                 this.name = null;
                 this._time = null;
                 this.childTasks = [];
                 this.isRoot = false;
                 this.id = taskId++;
+                if(init){
+                    this.name = init.name;
+                    this.id = init.id;
+                    this.time = init.time;
+                    if(init.childTasks && init.childTasks.length){
+                        init.childTasks.forEach(ct => {
+                            this.addChild(new Task(ct))
+                        })
+                    }
+                }
             }
             
             get time(){
@@ -47,6 +57,15 @@
             
             set time(t){
                 this._time = t;
+            }
+            
+            toJSON(){
+                return {
+                    name:this.name,
+                    time:this.time,
+                    childTasks:this.childTasks,
+                    id:this.id
+                }
             }
             
           
@@ -197,18 +216,95 @@
                 
     });
 
+    define("FileDropDirective",[], ()=>{
+        
+        class FileDropDirective{
+            constructor(el){
+                this.element = el;
+                this.fileDropped = new ng.core.EventEmitter();
+                document.addEventListener("dragover", this.doNothing);
+                document.addEventListener("dragenter", this.doNothing);
+                document.addEventListener("drop",this.doNothing);
+
+            }
+            hilite(){
+                this.element.nativeElement.style.backgroundColor="lightblue"
+            }
+            
+            unhilite(){
+                this.element.nativeElement.style.backgroundColor=null
+            }
+            
+            doNothing(ev){
+                ev.preventDefault();
+                ev.stopPropagation();
+            }
+            
+            getFile(ev){
+                this.doNothing(ev);
+                this.unhilite();
+                var dt = ev.dataTransfer;
+                if(dt.files && dt.files.length == 1){
+                    var file = dt.files[0];
+                    var reader = new FileReader();
+                    reader.onload = () => {
+                        var data = JSON.parse(reader.result)
+                        this.fileDropped.next(data);
+                    }
+                    reader.readAsText(file)
+                    
+                }
+            }
+        }
+        FileDropDirective.annotations = [
+            new ng.core.Directive({
+                selector:'[fileDrop]',
+                host:{
+                    '(dragenter)':'doNothing($event);hilite()',
+                    '(dragover)':'doNothing($event)',
+                    '(drop)':'getFile($event)',
+                    '(dragleave)':'unhilite()'
+                    
+                },
+                outputs:[
+                    'fileDropped'
+                ]
+            })
+        ]
+        FileDropDirective.parameters = [
+            ng.core.ElementRef
+        ]
+        
+        return FileDropDirective
+    })
     
-    define("AppComponent",["Task", "TaskComponent"], (Task,TaskComponent) =>{
+    define("AppComponent",["Task", "TaskComponent","FileDropDirective"], (Task,TaskComponent,FileDropDirective) =>{
         
         
         
         
-        function AppComponent(){
-        
-            this.rootTask = new Task();
-            this.rootTask.isRoot = true;
-            this.rootTask.addChild(new Task());
-            this.helpVisible = false;
+        class AppComponent{
+            constructor(){
+            
+                this.rootTask = new Task();
+                this.rootTask.isRoot = true;
+                this.rootTask.addChild(new Task());
+                this.helpVisible = false;
+                this.saveFileName = 'tasky-addy.json';
+                
+                
+                
+            }
+            
+            download(downloadLink){
+                downloadLink.href="data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.rootTask, null, 2))
+                
+            }
+            
+            fileUploaded(data){
+                this.rootTask = new Task(data);
+                this.rootTask.isRoot = true;
+            }
             
         };
         AppComponent.annotations = [
@@ -216,7 +312,7 @@
                 {
                     selector: 'my-app',
                     
-                    directives:[TaskComponent],
+                    directives:[TaskComponent,FileDropDirective],
                     template:getTpl('my-app'),
                 }    
             ),
@@ -342,36 +438,48 @@
         .help-panel{
             top: 28px;
         }
+        
+        .drop-upload{
+            display: inline-block;
+            padding: 0px 100px
+        }
 
     </style>
 </head>
 
 <body>
-    <my-app></my-app>
+    <my-app ></my-app>
 
     <script type="text/html" id='my-app'>
-        <input placeholder="what are you trying to do?" type="text" name="{{rootTask.id}}-name"  [(ngModel)]="rootTask.name">
-        <span >{{rootTask.time}}</span>
-        <hr /><task [task]="rootTask"></task>
-        <div class="title-buttons fixed-right"><a href="" (click)="helpVisible = !helpVisible; $event.preventDefault()">Help</a></div>
-        <div *ngIf="helpVisible" class="help-panel fixed-right">
-            <h3>Keyboard Commands</h3>
-            <div class="keyboard-command">
-                <code>Tab</code><span>Moves to the next item or adds a new item if at the very end</span>
+        <div>
+            <input placeholder="what are you trying to do?" type="text" name="{{rootTask.id}}-name"  [(ngModel)]="rootTask.name">
+            <span >{{rootTask.time}}</span>
+            <hr /><task [task]="rootTask"></task>
+            <div class="title-buttons fixed-right">
+                <span fileDrop (fileDropped)='fileUploaded($event)' class="drop-upload">drop a file here to upload</span>
+                <span class="download"><input title="the name of the file you want to download" type="text" [(ngModel)]='saveFileName'>
+                <a #downloadLink href="" title="Download this" [download]='saveFileName' (click)="download(downloadLink)">Download</a></span>
+                <a href="" (click)="helpVisible = !helpVisible; $event.preventDefault()">Help</a>
             </div>
-            <div class="keyboard-command">
-                <code>Ctrl + Space</code><span>Indents the current item to make it a child of the previous one</span>
-            </div>
-            <div class="keyboard-command">
-                <code>Ctrl + Alt + Space</code><span>Outdents the current item to make it a sibling to the previous one</span>
-            </div>
-            <div class="keyboard-command">
-                <code>Ctrl + Up</code><span>Move focus to the previous item</span>
-            </div>
-            <div class="keyboard-command">
-                <code>Ctrl + Down</code><span>Move focus to the next item</span>
-            </div>
-        </div> 
+            <div *ngIf="helpVisible" class="help-panel fixed-right">
+                <h3>Keyboard Commands</h3>
+                <div class="keyboard-command">
+                    <code>Tab</code><span>Moves to the next item or adds a new item if at the very end</span>
+                </div>
+                <div class="keyboard-command">
+                    <code>Ctrl + Space</code><span>Indents the current item to make it a child of the previous one</span>
+                </div>
+                <div class="keyboard-command">
+                    <code>Ctrl + Alt + Space</code><span>Outdents the current item to make it a sibling to the previous one</span>
+                </div>
+                <div class="keyboard-command">
+                    <code>Ctrl + Up</code><span>Move focus to the previous item</span>
+                </div>
+                <div class="keyboard-command">
+                    <code>Ctrl + Down</code><span>Move focus to the next item</span>
+                </div>
+            </div> 
+        </div>
     </script>
 
     <script type="text/html" id="task-template">
