@@ -5,7 +5,6 @@
     <script>
         document.write('<base href="' + document.location + '" />');
     </script>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/Rx.umd.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/angular2-polyfills.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/angular2-all.umd.js"></script>
@@ -15,12 +14,78 @@
     requirejs(
         ["AppComponent"],
         (AppComponent) => {
-            ng.core.enableProdMode();
+            //ng.core.enableProdMode();
             ng.platform.browser.bootstrap(AppComponent)
         }
     );
     
-    
+    define("keys", () =>{
+        var map = {
+            16:'shift',
+            17:'ctrl',
+            18: 'alt', //or option
+            91: 'command',//(mac), or start (windows)
+            8:'backspace',
+            9:'tab',
+            13:'enter',
+            27:'escape',
+            32:'space',
+            37:'left',
+            38:'up',
+            39:'right',
+            40:'down',
+            46:'delete',
+            35:'end',
+            36:'home',
+            33:'pageup',
+            34:'pagedown',
+            188:',',
+            190:'.',
+            191:'/',
+            192:'`',
+            189:'-',
+            187:'=',
+            186:';',
+            222:"'",
+            219:'[',
+            221:']',
+            220:'\\'
+        }
+        
+        for(let char of "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"){
+            map[char.charCodeAt(0)] = char.toLowerCase();
+        }
+        
+        var mods ={
+        'shiftKey':16,
+        'altKey':18,
+        'ctrlKey':17,
+        'metaKey':91            
+        }
+        
+        /**
+         *  given a keyboard event, look for all the keys that are currently pressed. If called with one parameter, the event, it will return
+         * an array of all the keys pressed. If called with two parameters, the event and an array or string of keys to query, it will return true
+         * or false if the keys currently pressed matches the query. 
+        */
+        return function keys(evt, query){
+            if(evt.keyCode){
+                var keys = [];
+                keys.push(evt.keyCode)
+                
+                for(let mod in mods){
+                    if(evt[mod] && keys.indexOf(mods[mod]) == -1){
+                        keys.push(mods[mod])
+                    }
+                }
+                
+                var names = keys.map(k => map[k]);
+            }
+        }
+        
+        
+        
+    })    
     
 
     define("Task", () =>{
@@ -86,6 +151,8 @@
                 var sibling = new Task();
                 
                 this.parentTask.addChild(sibling);
+                
+                return sibling;
             }
             addChild(child, at){
                 child.parentTask = this;
@@ -326,13 +393,15 @@
     
     
     
-    define("TaskComponent", () => {
+    define("TaskComponent", ["keys"],(keys) => {
         function TaskComponent(){
             this.task = null;
         }
         TaskComponent.prototype = {
             onKeyDown: function onKeyDown(ev, task){
-                //console.log(ev, task)
+
+                keys(ev);
+                
                 if(ev.keyCode === 32 && ev.ctrlKey && ev.altKey){
                     //ctrl + alt + space will outdent this task
                     task.outdent();
@@ -343,7 +412,9 @@
                     focusThisLater(ev.target.name);
                 }else if(ev.keyCode === 9 && !ev.shiftKey && ev.target.nextElementSibling == null && task.isVeryLastChild()){
                     //tab on last input will create a new row below
-                    task.newSibling();
+                    var newSib = task.newSibling();
+                    focusThisLater(newSib.id + '-name')
+                    
                 }else if(ev.keyCode === 38 && ev.ctrlKey ){
                     ev.preventDefault();
                     var prev = task.getFlattenedPrevious()
