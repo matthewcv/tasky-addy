@@ -70,16 +70,32 @@
         */
         return function keys(evt, query){
             if(evt.keyCode){
-                var keys = [];
-                keys.push(evt.keyCode)
+                var keys = new Set();
+                keys.add(map[evt.keyCode])
                 
                 for(let mod in mods){
-                    if(evt[mod] && keys.indexOf(mods[mod]) == -1){
-                        keys.push(mods[mod])
+                    if(evt[mod]){
+                        keys.add(map[mods[mod]])
                     }
                 }
                 
-                var names = keys.map(k => map[k]);
+                if(query){
+                    
+                    if(typeof(query) === 'string'){
+                        query = query.split('+')
+                    }
+                    if(query.length == keys.size){
+                        for(let i = 0; i < query.length; i++){
+                            if(!keys.has(query[i])){
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                    return false
+                }else{
+                    return [...keys]
+                }
             }
         }
         
@@ -399,28 +415,24 @@
         }
         TaskComponent.prototype = {
             onKeyDown: function onKeyDown(ev, task){
-
-                keys(ev);
-                
-                if(ev.keyCode === 32 && ev.ctrlKey && ev.altKey){
-                    //ctrl + alt + space will outdent this task
+                if(keys(ev,"alt+ctrl+space")){
                     task.outdent();
                     focusThisLater(ev.target.name);
-                }else if(ev.keyCode === 32 && ev.ctrlKey){
+                }else if(keys(ev,"ctrl+space")){
                     //ctrl + space will indent this task
                     task.indent();   
                     focusThisLater(ev.target.name);
-                }else if(ev.keyCode === 9 && !ev.shiftKey && ev.target.nextElementSibling == null && task.isVeryLastChild()){
+                }else if(keys(ev,"tab") && ev.target.nextElementSibling == null && task.isVeryLastChild()){
                     //tab on last input will create a new row below
                     var newSib = task.newSibling();
                     focusThisLater(newSib.id + '-name')
                     
-                }else if(ev.keyCode === 38 && ev.ctrlKey ){
+                }else if(keys(ev,"ctrl+up") || keys(ev,"ctrl+alt+up")   ){
                     ev.preventDefault();
                     var prev = task.getFlattenedPrevious()
                     if(prev){
                         let name;
-                        if(ev.altKey){
+                        if(keys(ev,"ctrl+alt+up")){
                             //ctrl + alt + up  move the thing up one row
                             task.parentTask.removeChild(task);
                             prev.parentTask.addChild(task, prev.myIndex())
@@ -431,12 +443,12 @@
                         }
                         focusThisLater(name);
                     }
-                }else if(ev.keyCode === 40 && ev.ctrlKey){
+                }else if(keys(ev,"ctrl+down") || keys(ev,"ctrl+alt+down") ){
                     ev.preventDefault();
                     var next =  task.getFlattenedNext();
                     if(next){
                         let name;
-                        if(ev.altKey){
+                        if(keys(ev,"ctrl+alt+down")){
                             //ctrl + alt + down  move the thing down one row
                             task.parentTask.removeChild(task); 
                             next.parentTask.addChild(task, next.myIndex() +1)
