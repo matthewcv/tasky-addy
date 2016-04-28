@@ -113,6 +113,7 @@
                 this._time = null;
                 this.childTasks = [];
                 this.isRoot = false;
+                this.parentTask = null;
                 this.id = taskId++;
                 if(init){
                     this.name = init.name;
@@ -155,7 +156,7 @@
                 return this.nextSibling() == null;
             }
             
-            isVeryLastChild(){
+            isFlattenedLastChild(){
                 //whether I am the last child of the last child all the way up to the root task. In other words, the bottom task in the list no matter what my parent is
                 var task = this;
                 while(!task.isRoot && task.isLastChild()){
@@ -163,14 +164,29 @@
                 }
                 return task.isRoot;  
             }
+            
+            getFlattenedLastChild(){
+                var lastChild = this.lastChild();
+                var nextLast = null;
+                while(lastChild != null && (nextLast = lastChild.lastChild()) != null ){
+                    lastChild = nextLast;
+                }
+                return lastChild;
+                
+            }
             newSibling(){
                 var sibling = new Task();
-                
-                this.parentTask.addChild(sibling);
-                
+                if(this.isLastChild()){
+                    this.parentTask.addChild(sibling);
+                }else{
+                    this.parentTask.addChild(sibling, this.myIndex() + 1);
+                }
                 return sibling;
             }
             addChild(child, at){
+                if(child.parentTask){
+                    child.parentTask.removeChild(child);
+                }
                 child.parentTask = this;
                 if(at == undefined){
                     this.childTasks.push(child)
@@ -178,16 +194,18 @@
                     this.childTasks.splice(at,0,child)
                 }
             }
+            
             removeChild(child){
-                this.childTasks.splice(child.myIndex(),1);
-                child.parentTask = null;
+                if(this.childTasks.indexOf(child) >= 0){
+                    this.childTasks.splice(child.myIndex(),1);
+                    child.parentTask = null;
+                }
             }
             
 
             indent(){
                 var prev = this.previousSibling();
                 if(prev != null){
-                    this.parentTask.removeChild(this);
                     prev.addChild(this);
                     return true;
                 } 
@@ -204,11 +222,46 @@
                     
                     var parentIdx = this.parentTask.myIndex();
                     var newParent = this.parentTask.parentTask;
-                    this.parentTask.removeChild(this);
                     newParent.addChild(this,parentIdx +1);
                     return true;
                 }
             }
+            
+            moveUp(){
+                var fp = this.getFlattenedPrevious();
+                if(fp != null){
+                    var fpp = fp.getFlattenedPrevious();
+                    if(fpp != null){
+                        if(fp.parentTask == fpp){
+                            fpp.addChild(this,fp.myIndex())
+                        }else if(fp.parentTask == fpp.parentTask){
+                            fp.parentTask.addChild(this,fp.myIndex())
+                        }else{
+                            fpp.parentTask.addChild(this)
+                        }
+                    }else{
+                        fp.parentTask.addChild(this, fp.myIndex())
+                    }
+                    return true;
+                }
+            }
+            
+            moveDown(){
+                var fn = this.getFlattenedNext();
+                if(fn && fn.parentTask == this){
+                    fn = this.getFlattenedLastChild().getFlattenedNext()
+                }
+                if(fn){
+                    if(fn.childTasks.length > 0){
+                        fn.addChild(this,0)
+                    }else{
+                        var offset = fn == this.nextSibling() ? 0:1
+                        fn.parentTask.addChild(this, fn.myIndex()+offset)
+                    }
+                    return true
+                }
+            }
+            
             myIndex(){
                 return this.parentTask.childTasks.indexOf(this);   
             }
@@ -253,7 +306,7 @@
             }
             
             getFlattenedNext(){
-                //get's the next task as if the whole thing was a flattened list
+                //gets the next task as if the whole thing was a flattened list
                 
                                 
                 var n = this.firstChild() || this.nextSibling();
@@ -272,19 +325,13 @@
             }
             
             getFlattenedPrevious(){
-                //get's the previous task as if the whole thing was a flattened list
+                //gets the previous task as if the whole thing was a flattened list
                 
                 var p = this.previousSibling();
                 if(p){
-                    var pl = p.lastChild();
+                    var pl = p.getFlattenedLastChild();
                     
                     if(pl){
-                        var tpl = pl.lastChild();
-                        while(tpl != null){
-                            pl = tpl;
-                            tpl = pl.lastChild();
-                        }
-                        
                         return pl;
                     }
                     return p;
@@ -415,49 +462,45 @@
         }
         TaskComponent.prototype = {
             onKeyDown: function onKeyDown(ev, task){
-                if(keys(ev,"alt+ctrl+space")){
+                if(keys(ev,"alt+ctrl+space") || keys(ev,"alt+ctrl+left")){
                     task.outdent();
                     focusThisLater(ev.target.name);
-                }else if(keys(ev,"ctrl+space")){
+                }else if(keys(ev,"ctrl+space")|| keys(ev,"alt+ctrl+right")){
                     //ctrl + space will indent this task
                     task.indent();   
                     focusThisLater(ev.target.name);
-                }else if(keys(ev,"tab") && ev.target.nextElementSibling == null && task.isVeryLastChild()){
+                }else if(keys(ev,"tab") && ev.target.nextElementSibling == null && task.isFlattenedLastChild()){
                     //tab on last input will create a new row below
                     var newSib = task.newSibling();
                     focusThisLater(newSib.id + '-name')
                     
-                }else if(keys(ev,"ctrl+up") || keys(ev,"ctrl+alt+up")   ){
+                }else if(keys(ev,"ctrl+up")   ){
                     ev.preventDefault();
                     var prev = task.getFlattenedPrevious()
                     if(prev){
-                        let name;
-                        if(keys(ev,"ctrl+alt+up")){
-                            //ctrl + alt + up  move the thing up one row
-                            task.parentTask.removeChild(task);
-                            prev.parentTask.addChild(task, prev.myIndex())
-                            name = ev.target.name
-                        }else{
-                            //ctrl + Up select the previous item
-                            name = ev.target.name.replace(task.id.toString(), prev.id.toString());
-                        }
+                        //ctrl + Up select the previous item
+                        let name = ev.target.name.replace(task.id.toString(), prev.id.toString());
                         focusThisLater(name);
                     }
-                }else if(keys(ev,"ctrl+down") || keys(ev,"ctrl+alt+down") ){
+                }else if(keys(ev,"ctrl+alt+up")   ){
+                    ev.preventDefault();
+                    if(task.moveUp()){
+                        focusThisLater(ev.target.name);
+                    }
+                }else if(keys(ev,"ctrl+down") ){
                     ev.preventDefault();
                     var next =  task.getFlattenedNext();
                     if(next){
-                        let name;
-                        if(keys(ev,"ctrl+alt+down")){
-                            //ctrl + alt + down  move the thing down one row
-                            task.parentTask.removeChild(task); 
-                            next.parentTask.addChild(task, next.myIndex() +1)
-                            name = ev.target.name
-                        }else{
-                            //ctrl + Down select the next item
-                            name = ev.target.name.replace(task.id.toString(), next.id.toString());
-                        }
+                        //ctrl + Down select the next item
+                        let name = ev.target.name.replace(task.id.toString(), next.id.toString());
                         focusThisLater(name);
+                    }
+                    
+                }else if(keys(ev,"ctrl+alt+down") ){
+                    ev.preventDefault();
+                    if(task.moveDown()){
+                        //ctrl + alt + down  move the thing down one row
+                        focusThisLater(ev.target.name);
                     }
                     
                 }
@@ -490,7 +533,10 @@
     
     function focusThisLater(name, after){
         setTimeout(()=>{
-            document.querySelector(`input[name='${name}']`).focus()
+            var elem = document.querySelector(`input[name='${name}']`);
+            if(elem){
+                elem.focus();
+            }
             if(after){
                 after();
             }
@@ -520,6 +566,7 @@
         }
         .help-panel{
             top: 28px;
+            width:50%;
         }
         
         .drop-upload{
@@ -550,10 +597,16 @@
                     <code>Tab</code><span>Moves to the next item or adds a new item if at the very end</span>
                 </div>
                 <div class="keyboard-command">
-                    <code>Ctrl + Space</code><span>Indents the current item to make it a child of the previous one</span>
+                    <code>Ctrl + Space</code>/<code>Ctrl + Alt + Right</code><span>Indents the current item to make it a child of the previous one</span>
                 </div>
                 <div class="keyboard-command">
-                    <code>Ctrl + Alt + Space</code><span>Outdents the current item to make it a sibling to the previous one</span>
+                    <code>Ctrl + Alt + Space</code>/<code>Ctrl + Alt + Left</code><span>Outdents the current item to make it a sibling to the previous one</span>
+                </div>
+                <div class="keyboard-command">
+                    <code>Ctrl + Alt + Up</code><span>Moves the current item up</span>
+                </div>
+                <div class="keyboard-command">
+                    <code>Ctrl + Alt + Down</code><span>Moves the current item down</span>
                 </div>
                 <div class="keyboard-command">
                     <code>Ctrl + Up</code><span>Move focus to the previous item</span>
