@@ -9,7 +9,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/angular2-polyfills.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/2.0.0-beta.13/angular2-all.umd.js"></script>
     <script src="https://cdn.rawgit.com/requirejs/almond/0.3.1/almond.js"></script>
-
+    <script src="task.js"></script>
+    <script src="keys.js"></script>
     <script>
     requirejs(
         ["AppComponent"],
@@ -19,332 +20,14 @@
         }
     );
     
-    define("keys", () =>{
-        var map = {
-            16:'shift',
-            17:'ctrl',
-            18: 'alt', //or option
-            91: 'command',//(mac), or start (windows)
-            8:'backspace',
-            9:'tab',
-            13:'enter',
-            27:'escape',
-            32:'space',
-            37:'left',
-            38:'up',
-            39:'right',
-            40:'down',
-            46:'delete',
-            35:'end',
-            36:'home',
-            33:'pageup',
-            34:'pagedown',
-            188:',',
-            190:'.',
-            191:'/',
-            192:'`',
-            189:'-',
-            187:'=',
-            186:';',
-            222:"'",
-            219:'[',
-            221:']',
-            220:'\\'
+    define("settings",[], () => {
+        return settings = {
+            showOtherThings: false,
+            showNotes: true,
         }
-        
-        for(let char of "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"){
-            map[char.charCodeAt(0)] = char.toLowerCase();
-        }
-        
-        var mods ={
-        'shiftKey':16,
-        'altKey':18,
-        'ctrlKey':17,
-        'metaKey':91            
-        }
-        
-        /**
-         *  given a keyboard event, look for all the keys that are currently pressed. If called with one parameter, the event, it will return
-         * an array of all the keys pressed. If called with two parameters, the event and an array or string of keys to query, it will return true
-         * or false if the keys currently pressed matches the query. 
-        */
-        return function keys(evt, query){
-            if(evt.keyCode){
-                var keys = new Set();
-                keys.add(map[evt.keyCode])
-                
-                for(let mod in mods){
-                    if(evt[mod]){
-                        keys.add(map[mods[mod]])
-                    }
-                }
-                
-                if(query){
-                    
-                    if(typeof(query) === 'string'){
-                        query = query.split('+')
-                    }
-                    if(query.length == keys.size){
-                        for(let i = 0; i < query.length; i++){
-                            if(!keys.has(query[i])){
-                                return false;
-                            }
-                        }
-                        return true;
-                    }
-                    return false
-                }else{
-                    return [...keys]
-                }
-            }
-        }
-        
-        
-        
-    })    
+    })
     
 
-    define("Task", () =>{
-        var taskId = 0;
-        class Task{
-            
-            constructor(init){
-                this.name = null;
-                this._time = null;
-                this.childTasks = [];
-                this.isRoot = false;
-                this.parentTask = null;
-                this.id = taskId++;
-                if(init){
-                    this.name = init.name;
-                    this.id = init.id;
-                    this.time = init.time;
-                    if(init.childTasks && init.childTasks.length){
-                        init.childTasks.forEach(ct => {
-                            this.addChild(new Task(ct))
-                        })
-                    }
-                }
-            }
-            
-            get time(){
-                
-                if(this.childTasks.length){
-                    let time = 0;
-                    this.childTasks.forEach(c => time += c.time)
-                    return time;
-                }
-                return this._time;
-            }
-            
-            set time(t){
-                this._time = t;
-            }
-            
-            toJSON(){
-                return {
-                    name:this.name,
-                    time:this.time,
-                    childTasks:this.childTasks,
-                    id:this.id
-                }
-            }
-            
-          
-            isLastChild(){
-                //whether i am the last child in my parent's childTasks
-                return this.nextSibling() == null;
-            }
-            
-            isFlattenedLastChild(){
-                //whether I am the last child of the last child all the way up to the root task. In other words, the bottom task in the list no matter what my parent is
-                var task = this;
-                while(!task.isRoot && task.isLastChild()){
-                    task = task.parentTask;
-                }
-                return task.isRoot;  
-            }
-            
-            getFlattenedLastChild(){
-                var lastChild = this.lastChild();
-                var nextLast = null;
-                while(lastChild != null && (nextLast = lastChild.lastChild()) != null ){
-                    lastChild = nextLast;
-                }
-                return lastChild;
-                
-            }
-            newSibling(){
-                var sibling = new Task();
-                if(this.isLastChild()){
-                    this.parentTask.addChild(sibling);
-                }else{
-                    this.parentTask.addChild(sibling, this.myIndex() + 1);
-                }
-                return sibling;
-            }
-            addChild(child, at){
-                if(child.parentTask){
-                    child.parentTask.removeChild(child);
-                }
-                child.parentTask = this;
-                if(at == undefined){
-                    this.childTasks.push(child)
-                }else{
-                    this.childTasks.splice(at,0,child)
-                }
-            }
-            
-            removeChild(child){
-                if(this.childTasks.indexOf(child) >= 0){
-                    this.childTasks.splice(child.myIndex(),1);
-                    child.parentTask = null;
-                }
-            }
-            
-
-            indent(){
-                var prev = this.previousSibling();
-                if(prev != null){
-                    prev.addChild(this);
-                    return true;
-                } 
-            }
-            
-            outdent(){
-                if(!this.parentTask.isRoot){
-                    
-                    var last = this.lastSibling();
-                    while(last != null){
-                        last.outdent();
-                        last = this.lastSibling();
-                    }
-                    
-                    var parentIdx = this.parentTask.myIndex();
-                    var newParent = this.parentTask.parentTask;
-                    newParent.addChild(this,parentIdx +1);
-                    return true;
-                }
-            }
-            
-            moveUp(){
-                var fp = this.getFlattenedPrevious();
-                if(fp != null){
-                    var fpp = fp.getFlattenedPrevious();
-                    if(fpp != null){
-                        if(fp.parentTask == fpp){
-                            fpp.addChild(this,fp.myIndex())
-                        }else if(fp.parentTask == fpp.parentTask){
-                            fp.parentTask.addChild(this,fp.myIndex())
-                        }else{
-                            fpp.parentTask.addChild(this)
-                        }
-                    }else{
-                        fp.parentTask.addChild(this, fp.myIndex())
-                    }
-                    return true;
-                }
-            }
-            
-            moveDown(){
-                var fn = this.getFlattenedNext();
-                if(fn && fn.parentTask == this){
-                    fn = this.getFlattenedLastChild().getFlattenedNext()
-                }
-                if(fn){
-                    if(fn.childTasks.length > 0){
-                        fn.addChild(this,0)
-                    }else{
-                        var offset = fn == this.nextSibling() ? 0:1
-                        fn.parentTask.addChild(this, fn.myIndex()+offset)
-                    }
-                    return true
-                }
-            }
-            
-            myIndex(){
-                return this.parentTask.childTasks.indexOf(this);   
-            }
-            previousSibling(){
-                var myIdx = this.myIndex();
-                if(myIdx > 0){
-                    return this.parentTask.childTasks[myIdx-1]
-                }
-                return null;
-            }
-            nextSibling(){
-                var myIdx = this.myIndex();
-                if(myIdx < this.parentTask.childTasks.length -1){
-                    return this.parentTask.childTasks[myIdx+1]
-                }
-                return null;
-            }
-            lastSibling(){
-                var lastIdx = this.parentTask.childTasks.length -1;
-                if(this.myIndex() == lastIdx){
-                    return null;
-                }
-                return this.parentTask.childTasks[lastIdx];
-            }
-            firstSibling(){
-                if(this.myIndex == 0){
-                    return null;
-                }
-                return this.parentTask.childTasks[0];
-            }
-            firstChild(){
-                if(this.childTasks.length == 0){
-                    return null;
-                }
-                return this.childTasks[0];
-            }
-            lastChild(){
-                if(this.childTasks.length == 0){
-                    return null;
-                }
-                return this.childTasks[this.childTasks.length-1];
-            }
-            
-            getFlattenedNext(){
-                //gets the next task as if the whole thing was a flattened list
-                
-                                
-                var n = this.firstChild() || this.nextSibling();
-                if(n){
-                    return n;
-                }
-                
-                var p = this.parentTask;
-                while(!p.isRoot){
-                    var pn = p.nextSibling();
-                    if(pn){
-                        return pn;
-                    }
-                    p = p.parentTask;
-                }
-            }
-            
-            getFlattenedPrevious(){
-                //gets the previous task as if the whole thing was a flattened list
-                
-                var p = this.previousSibling();
-                if(p){
-                    var pl = p.getFlattenedLastChild();
-                    
-                    if(pl){
-                        return pl;
-                    }
-                    return p;
-                }
-                if(!this.parentTask.isRoot){
-                    return this.parentTask;
-                }
-                return null;
-            }
-        }
-        return Task;
-                
-    });
 
     define("FileDropDirective",[], ()=>{
         
@@ -358,11 +41,13 @@
 
             }
             hilite(){
-                this.element.nativeElement.style.backgroundColor="lightblue"
+                this.element.nativeElement.style.backgroundColor="darkslategray"
+                this.element.nativeElement.style.color="ivory"
             }
             
             unhilite(){
                 this.element.nativeElement.style.backgroundColor=null
+                this.element.nativeElement.style.color=null
             }
             
             doNothing(ev){
@@ -379,7 +64,7 @@
                     var reader = new FileReader();
                     reader.onload = () => {
                         var data = JSON.parse(reader.result)
-                        this.fileDropped.next(data);
+                        this.fileDropped.next({data, fileName:file.name});
                     }
                     reader.readAsText(file)
                     
@@ -408,7 +93,7 @@
         return FileDropDirective
     })
     
-    define("AppComponent",["Task", "TaskComponent","FileDropDirective"], (Task,TaskComponent,FileDropDirective) =>{
+    define("AppComponent",["Task", "TaskComponent","FileDropDirective","keys", "settings"], (Task,TaskComponent,FileDropDirective, keys, settings) =>{
         
         
         
@@ -416,14 +101,30 @@
         class AppComponent{
             constructor(){
             
-                this.rootTask = new Task();
-                this.rootTask.isRoot = true;
+                this.rootTask = this.newRootTask();
                 this.rootTask.addChild(new Task());
-                this.helpVisible = false;
-                this.saveFileName = 'tasky-addy.json';
+                this.settings = settings;
+                this.saveFileName = "";
                 
-                
-                
+            }
+            
+            newRootTask(data){
+                var rt = new Task(data);
+                rt.isRoot = true;
+                var oldName = rt.name;
+                var that = this;
+                Object.defineProperty(rt,"name",{
+                    enumerable:true,
+                    get:function(){
+                        return this._name;
+                    },
+                    set:function(val){
+                        this._name = val;
+                        that.saveFileName = val + ".json";
+                    }
+                })
+                rt.name = oldName;
+                return rt;
             }
             
             download(downloadLink){
@@ -431,9 +132,23 @@
                 
             }
             
-            fileUploaded(data){
-                this.rootTask = new Task(data);
-                this.rootTask.isRoot = true;
+            fileUploaded({data, fileName}){
+                this.rootTask = this.newRootTask(data);
+                this.saveFileName = fileName;
+            }
+            
+            
+            globalKeyDown(ev){
+                if(keys(ev,"ctrl+alt+h")){
+                    this.settings.showOtherThings = !this.settings.showOtherThings
+                }            
+                if(keys(ev,"ctrl+alt+n")){
+                    this.settings.showNotes = !this.settings.showNotes
+                }            
+            }
+            
+            ngOnChanges(changes){
+                console.dir(changes)
             }
             
         };
@@ -444,6 +159,9 @@
                     
                     directives:[TaskComponent,FileDropDirective],
                     template:getTpl('my-app'),
+                    host:{
+                        '(window:keydown)':'globalKeyDown($event)'
+                    }
                 }    
             ),
 
@@ -456,12 +174,15 @@
     
     
     
-    define("TaskComponent", ["keys"],(keys) => {
-        function TaskComponent(){
-            this.task = null;
-        }
-        TaskComponent.prototype = {
-            onKeyDown: function onKeyDown(ev, task){
+    define("TaskComponent", ["keys","settings"],(keys, settings) => {
+        class TaskComponent{
+            
+            constructor(){
+                this.task = null;
+                this.settings = settings;
+            }
+            
+            onKeyDown(ev, task){
                 if(keys(ev,"alt+ctrl+space") || keys(ev,"alt+ctrl+left")){
                     task.outdent();
                     focusThisLater(ev.target.name);
@@ -503,6 +224,10 @@
                         focusThisLater(ev.target.name);
                     }
                     
+                }else if(keys(ev,"ctrl+left") && ev.target.previousElementSibling){
+                    ev.target.previousElementSibling.focus()
+                }else if(keys(ev,"ctrl+right") && ev.target.nextElementSibling){
+                    ev.target.nextElementSibling.focus()
                 }
                 
             }
@@ -533,7 +258,7 @@
     
     function focusThisLater(name, after){
         setTimeout(()=>{
-            var elem = document.querySelector(`input[name='${name}']`);
+            var elem = document.querySelector(`input[name='${name}']`) || document.querySelector(`textarea[name='${name}']`);
             if(elem){
                 elem.focus();
             }
@@ -547,31 +272,55 @@
     </script>
     <style>
         .task-children {
-            padding-left: 15px;
+            padding-left: 1em;
         }
         .fixed-right{
             position: fixed;
-            right: 8px;
+            right: .5em;
         }
         .title-buttons{
-            top: 8px;
+            top: .5em;
         }
         .keyboard-command>code{
-            margin:0px 5px;
+            margin:0 .4em;
             font-weight: bold;
             font-size: larger;
         }
         .keyboard-command>span{
-            margin:0px 5px;
+            margin:0px .4em;
         }
         .help-panel{
-            top: 28px;
+            top: 2.5em;
             width:50%;
+            background: lightgray;
+            padding: .5em;
         }
         
         .drop-upload{
             display: inline-block;
-            padding: 0px 100px
+            padding: .5em 3em
+        }
+        
+        input.root-name{
+            width:40em
+        }
+        
+        textarea.notes {
+            width: 50em
+        }
+        
+        input.name {
+            width: 25em
+        }
+        
+        input.time {
+            width: 5em
+        }
+        
+        input,
+        textarea {
+            height: 1.2em;
+            vertical-align: text-top
         }
 
     </style>
@@ -582,16 +331,19 @@
 
     <script type="text/html" id='my-app'>
         <div>
-            <input placeholder="what are you trying to do?" type="text" name="{{rootTask.id}}-name"  [(ngModel)]="rootTask.name">
+            <input placeholder="what are you trying to do?" type="text" name="{{rootTask.id}}-name" class="root-name" [(ngModel)]="rootTask.name">
             <span >{{rootTask.time}}</span>
             <hr /><task [task]="rootTask"></task>
             <div class="title-buttons fixed-right">
+                <a href="" (click)="settings.showOtherThings = !settings.showOtherThings; $event.preventDefault()">Other things</a>
+            </div>
+            <div *ngIf="settings.showOtherThings" class="help-panel fixed-right">
+                <div>
                 <span fileDrop (fileDropped)='fileUploaded($event)' class="drop-upload">drop a file here to upload</span>
                 <span class="download"><input title="the name of the file you want to download" type="text" [(ngModel)]='saveFileName'>
                 <a #downloadLink href="" title="Download this" [download]='saveFileName' (click)="download(downloadLink)">Download</a></span>
-                <a href="" (click)="helpVisible = !helpVisible; $event.preventDefault()">Help</a>
-            </div>
-            <div *ngIf="helpVisible" class="help-panel fixed-right">
+                </div>
+                <hr>
                 <h3>Keyboard Commands</h3>
                 <div class="keyboard-command">
                     <code>Tab</code><span>Moves to the next item or adds a new item if at the very end</span>
@@ -614,6 +366,15 @@
                 <div class="keyboard-command">
                     <code>Ctrl + Down</code><span>Move focus to the next item</span>
                 </div>
+                <div class="keyboard-command">
+                    <code>Ctrl + Alt + H</code><span>Toggle display of this section</span>
+                </div>
+                <div class="keyboard-command">
+                    <code>Ctrl + Alt + N</code><span>Toggle display of notes</span>
+                </div>
+                <hr>
+                <h3>Settings</h3>
+                <div><input type="checkbox" [(ngModel)]="settings.showNotes" /> Show notes</div>
             </div> 
         </div>
     </script>
@@ -621,8 +382,9 @@
     <script type="text/html" id="task-template">
         <div class="task">
             <div class="task-data" *ngIf="!task.isRoot">
-                <input placeholder="name" type="text" name="{{task.id}}-name" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.name">
-                <input placeholder="time" type="number" name="{{task.id}}-time" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.time" [disabled]="!!task.childTasks.length" >
+                <input class="name" placeholder="name" type="text" name="{{task.id}}-name" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.name" />
+                <input class="time" placeholder="time" type="number" name="{{task.id}}-time" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.time" [disabled]="!!task.childTasks.length" />
+                <textarea *ngIf="settings.showNotes" class="notes" placeholder="notes" type="text" name="{{task.id}}-notes" (keydown)="onKeyDown($event, task)" [(ngModel)]="task.notes"></textarea>
             </div>
             <div class="task-children" *ngFor="#ctask of task.childTasks">
                 <task [task]="ctask"></task>
