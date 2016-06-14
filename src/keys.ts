@@ -1,4 +1,3 @@
-    define("keys", () =>{
         var map = {
             16:'shift',
             17:'ctrl',
@@ -47,9 +46,9 @@
          * an array of all the keys pressed. If called with two parameters, the event and an array or string of keys to query, it will return true
          * or false if the keys currently pressed matches the query. 
         */
-        return function keys(evt, query){
+        export function keys(evt:KeyboardEvent, query):boolean|string[]{
             if(evt.keyCode){
-                var keys = new Set();
+                var keys = new Set<string>();
                 keys.add(map[evt.keyCode])
                 
                 for(let mod in mods){
@@ -73,11 +72,10 @@
                     }
                     return false
                 }else{
-                    return [...keys]
+                    return Array.from(keys);
                 }
             }
         }
         
         
         
-    })    

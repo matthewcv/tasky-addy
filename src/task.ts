@@ -1,19 +1,28 @@
-    define("Task", () =>{
         var taskId = 0;
-        class Task{
+export interface BaseTask{
+    name:string;
+    time:number;
+    notes:string;
+    childTasks:BaseTask[];
+    id:number
+}
+
+export class Task implements BaseTask{
             
-            constructor(init){
-                this.name = null;
-                this._time = null;
-                this.notes = null;
-                this.childTasks = [];
-                this.isRoot = false;
-                this.parentTask = null;
-                this.id = taskId++;
+            name:string = null;
+            _time:number = null;
+            notes:string = null;
+            childTasks: Task[] = []
+            isRoot = false;
+            parentTask: Task = null;
+            id = taskId++;
+
+            constructor(init?:BaseTask){
                 if(init){
                     this.name = init.name;
                     this.id = init.id;
                     this.time = init.time;
+                    this.notes = init.notes;
                     if(init.childTasks && init.childTasks.length){
                         init.childTasks.forEach(ct => {
                             this.addChild(new Task(ct))
@@ -54,7 +63,7 @@
             
             isFlattenedLastChild(){
                 //whether I am the last child of the last child all the way up to the root task. In other words, the bottom task in the list no matter what my parent is
-                var task = this;
+                var task = <Task>this;
                 while(!task.isRoot && task.isLastChild()){
                     task = task.parentTask;
                 }
@@ -79,7 +88,7 @@
                 }
                 return sibling;
             }
-            addChild(child, at){
+            addChild(child, at?){
                 if(child.parentTask){
                     child.parentTask.removeChild(child);
                 }
@@ -183,7 +192,7 @@
                 return this.parentTask.childTasks[lastIdx];
             }
             firstSibling(){
-                if(this.myIndex == 0){
+                if(this.myIndex() == 0){
                     return null;
                 }
                 return this.parentTask.childTasks[0];
@@ -238,6 +247,4 @@
                 return null;
             }
         }
-        return Task;
-                
-    });
+
